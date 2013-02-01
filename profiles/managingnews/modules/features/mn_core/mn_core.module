@@ -1,0 +1,571 @@
+<?php
+
+include_once('mn_core.features.inc');
+
+
+/**
+ * Implementation of hook_help().
+ */
+function mn_core_help($path, $arg) {
+  switch ($path) {
+    case 'feeds':
+      $output = "<p>";
+      $output .= t("<em>Feeds</em> shows the latest news items retrieved from the site's feeds. You can switch the display between articles, condensed list, and map display modes using the icons at the top right.");
+      $output .= "</p>";
+      $actions = '';
+      if (node_access('create', 'feed')) {
+        $actions .= "<li>". t("!add new RSS/Atom feeds to the site.", array('!add' => l(t('Add'), 'node/add/feed'))) ."</li>";
+      }
+      if (user_access('manage stored views')) {
+        $actions .= "<li>". t("!search the news and highlight saved searches on the frontpage.", array('!search' => l(t('Search'), 'search'))) ."</li>";
+      }
+      if (user_access('manage data relations')) {
+        $actions .= "<li>". t("Organize items into !channels by clicking the star links. You can change the channel you add items to by clicking the star icon to your lower right.", array('!channels' => l(t('Channels'), 'channels'))) ."</li>";
+      }
+      if (!empty($actions)) {
+        $output .= "<ul>{$actions}</ul>";
+      }
+      return $output;
+    break;
+  }
+}
+
+/**
+ * Implementation of hook_cron().
+ */
+function mn_core_cron() {
+  register_shutdown_function('mn_core_cron_log');
+}
+
+/**
+ * Implementation of hook_strongarm().
+ */
+function mn_core_strongarm() {
+  // Set these variables instead of strongarming them.
+  global $base_url;
+  $defaults = array(
+    'site_frontpage' => 'feeds',
+    'site_mission' => t('Latest news from !domain', array('!domain' => $base_url)),
+    'openlayers_source' => 'profiles/managingnews/libraries/openlayers/OpenLayers.js',
+
+    // Purl
+    'purl_method_views_modes' => 'querystring',
+    'purl_method_views_modes_key' => 'display',
+    'purl_types' => array (
+      'querystring' => 'querystring',
+      'path' => 0,
+      'pair' => 0,
+      'domain' => 0,
+      'subdomain' => 0,
+      'extension' => 0,
+      'useragent' => 0,
+    ),
+
+    // Date, Time
+    'configurable_timezones' => FALSE,
+    'date_default_timezone_name' => 'America/New_York',
+    'date_default_timezone' => -14400,
+    'date_format_long' => 'g:ia M j Y',
+    'date_format_medium' => 'M j Y',
+    'date_format_short' => 'M j',
+
+    // Filter format defaults
+    'allowed_html_1' => '<div> <span> <br> <a> <em> <strong> <cite> <code> <strike> <ul> <ol> <li> <dl> <dt> <dd> <img> <blockquote> <p> <h1> <h2> <h3> <h4> <h5> <h6><table> <caption> <thead> <th> <td> <tr> <sup> <sub>',
+  );
+  foreach ($defaults as $name => $value) {
+    $current = variable_get($name, '');
+    if ($current === '') {
+      variable_set($name, $value);
+    }
+  }
+
+  return array (
+    'menu_primary_links_source' => 'features',
+    'views_no_hover_links' => TRUE,
+    'views_hide_help_message' => TRUE,
+
+    // No registration, no email verification.
+    'user_register' => '0',
+    'user_email_verification' => 0,
+
+    // Do not use feeds defaults.
+    'feeds_use_defaults' => FALSE,
+
+    // Content type settings.
+    'node_options_feed' => array('status'),
+    'upload_feed' => '0',
+  );
+}
+
+/**
+ * Implementation of hook_form_alter().
+ *
+ * The hook_form_[form_id]_alter() syntax is not used here as it will
+ * get called prior to Feeds.
+ */
+function mn_core_form_alter(&$form, $form_state, $form_id) {
+  if ($form_id == 'feed_node_form') {
+    // Unset the URL field title.
+    unset($form['feeds']['FeedsHTTPFetcher']['source']['#title']);
+    // Make the description more specific.
+    $form['feeds']['FeedsHTTPFetcher']['source']['#description'] = t('Enter a URL to a valid RSS or Atom feed.');
+    // Instead, give its fieldset a nice title.
+    $form['feeds']['#title'] = t('Feed URL');
+    $form['feeds']['#title'] .= "\n<span class='form-required'>*</span>";
+    // Move it all the way up top.
+    $form['feeds']['#weight'] = -10;
+
+    // Hide the node's title field in a fieldset. This will expand if the title
+    // can't be populated from feed.
+    $title = $form['title'];
+    unset($title['#title']);
+    $form['title'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Title'),
+      '#collapsible' => TRUE,
+      '#collapsed' => TRUE,
+    );
+    $form['title']['title'] = $title;
+  }
+}
+
+/**
+ * Implementation of hook_form_alter() for node_delete_confirm.
+ */
+function mn_core_form_node_delete_confirm_alter(&$form, $form_state) {
+  if (isset($form['nid']['#value']) && $node = node_load($form['nid']['#value'])) {
+    context_set_by_condition('node', $node->type);
+  }
+}
+
+/**
+ * Implementation of hook_form_alter() for data_node_active_form.
+ *
+ * Remove extra form item label.
+ */
+function mn_core_form_data_node_active_form_alter(&$form, $form_state) {
+  unset($form['nid']['#title']);
+}
+
+/**
+ * Implementation of hook_openlayers_behaviors().
+ *
+ * This is a ctools plugins hook.
+ */
+function mn_core_openlayers_behaviors() {
+  return array(
+    'mn_core_behavior_layerswitcherplus' => array(
+      'title' => t('MN LayerSwitcherPlus'),
+      'type' => 'layer',
+      'behavior' => array(
+        'class' => 'mn_core_behavior_layerswitcherplus',
+        'parent' => 'openlayers_behavior',
+        'path' => drupal_get_path('module', 'mn_core') .'/behaviors',
+        'file' => 'mn_core_behavior_layerswitcherplus.inc',
+      ),
+    ),
+    'mn_core_behavior_popup' => array(
+      'title' => t('MN custom popup'),
+      'type' => 'layer',
+      'behavior' => array(
+        'class' => 'mn_core_behavior_popup',
+        'parent' => 'openlayers_behavior',
+        'path' => drupal_get_path('module', 'mn_core') .'/behaviors',
+        'file' => 'mn_core_behavior_popup.inc',
+      ),
+    ),
+    'mn_core_behavior_scalepoints' => array(
+      'title' => t('MN scaled points'),
+      'type' => 'layer',
+      'behavior' => array(
+        'class' => 'mn_core_behavior_scalepoints',
+        'parent' => 'openlayers_behavior',
+        'path' => drupal_get_path('module', 'mn_core') .'/behaviors',
+        'file' => 'mn_core_behavior_scalepoints.inc',
+      ),
+    ),
+  );
+}
+
+/**
+ * Implementation of hook_block().
+ */
+function mn_core_block($op = 'list', $delta = 0) {
+  switch ($op) {
+    case 'list':
+      $blocks = array();
+      $blocks['admin']['info'] = t('MN: Admin menu');
+      $blocks['formats']['info'] = t('MN: Alternative formats');
+      $blocks['print']['info'] = t('MN: Print controls');
+      $blocks['clock']['info'] = t('MN: Clock');
+      $blocks['user']['info'] = t('MN: User controls');
+      return $blocks;
+    case 'view':
+      switch ($delta) {
+        case 'user':
+          global $user;
+          if ($user->uid) {
+            $links = array(
+              'user' => array(
+                'title' => t('Account settings'),
+                'href' => "user/{$user->uid}/edit",
+              ),
+              'logout' => array(
+                'title' => t('Log out'),
+                'href' => 'logout',
+              ),
+            );
+            return array(
+              'subject' => t('My account'),
+              'content' => theme('links', $links, array('class' => 'menu')),
+            );
+          }
+          break;
+        case 'clock':
+          // If dateAPI exists, use a timezone location.
+          if (module_exists('date_api')) {
+            $time = date_format_date(date_now(), 'custom', 'g:ia F j');
+            $tz = str_replace('_', ' ', date_default_timezone_name());
+          }
+          // Otherwise fallback to a GMT offset display.
+          else {
+            $time = format_date(time(), 'custom', 'g:ia F j');
+            $offset = variable_get('date_default_timezone', 0);
+            $hours = floor(abs($offset / 3600));
+            $minutes = str_pad(abs($offset % 3600) / 60, 2, 0, STR_PAD_LEFT);
+            $tz = $offset >= 0 ? "+{$hours}:{$minutes} GMT" : "-{$hours}:{$minutes} GMT";
+          }
+          return array('content' => "<strong class='time'>{$time}</strong><small class='timezone'>{$tz}</small>");
+        case 'print':
+          $block = array();
+          if (isset($_GET['print'])) {
+            $block['content'] = "<div class='back-link'>";
+            $block['content'] .= l(t('Back to site'), $_GET['q'], array('query' => drupal_query_string_encode($_GET, array('q', 'print'))));
+            $block['content'] .= "</div>";
+            $block['content'] .= drupal_get_form('mn_core_print_controls');
+          }
+          return $block;
+        case 'admin':
+          $links = array();
+          $paths = mn_core_admin_paths();
+          foreach (array_keys($paths) as $path) {
+            $item = menu_get_item($path);
+            if ($item['access']) {
+              $class = module_exists('seed') ? seed_id_safe($item['title']) : str_replace('/', '-', $path);
+              $links[$class] = $item;
+            }
+          }
+          $output = theme('links', $links, array('class' => 'menu'));
+          return array('subject' => t('Admin'), 'content' => $output);
+        case 'formats':
+          if ($view = views_get_page_view()) {
+            // Prepare a page query string to passthru alt. format links.
+            $query = $_GET;
+            if (isset($query['q'])) {
+              unset($query['q']);
+            }
+            if (isset($query['page'])) {
+              unset($query['page']);
+            }
+
+            $links = array();
+            $view = $view->view;
+            foreach ($view->display as $display_id => $display) {
+              // For each feed that is attached to current display, add link
+              if ($display->display_plugin == 'feed') {
+                $displays = $display->handler->get_option('displays');
+                if (!empty($displays[$view->current_display])) {
+                  // Clone the view and use the ->get_url() method to preserve/replace args correctly.
+                  $feed_view = $view->clone_view();
+                  $feed_view->set_display($display_id);
+                  $path = $feed_view->get_url();
+                  $feed_view->destroy();
+
+                  $links[$display_id] = array(
+                    'title' => $display->display_title,
+                    'href' => $path,
+                    'query' => $query,
+                  );
+                }
+              }
+            }
+            $links['print'] = array(
+              'title' => t('Print'),
+              'href' => $_GET['q'],
+              'query' => $query + array('print' => 1),
+            );
+            $output = theme('links', $links, array('class' => 'links formats'));
+            return array('content' => $output);
+          }
+          break;
+      }
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function mn_core_perm() {
+  return array('administer mn');
+}
+
+/**
+ * Implementation of hook_user().
+ * Add a flag for displaying the initial MN welcome message for new users.
+ */
+function mn_core_user($op, &$edit, &$account, $category = NULL) {
+  if ($op === 'insert') {
+    $edit['mn_welcome'] = TRUE;
+  }
+}
+
+/**
+ * Implementation of hook_views_api().
+ */
+function mn_core_views_api() {
+  return array(
+    'api' => '2.0',
+    'path' => drupal_get_path('module', 'mn_core') .'/views',
+  );
+}
+
+/**
+ * Implementation of hook_data_views_handlers_alter().
+ */
+function mn_core_data_views_handlers_alter(&$handlers) {
+  $handlers['field']['mn_core_handler_field'] = 'mn_core_handler_field';
+}
+
+/**
+ * Provide a list of admin paths allowed for MN administrators.
+ *
+ * If a value is provided in each key-value pair, it will be used to
+ * override the default menu item title.
+ */
+function mn_core_admin_paths() {
+  return array(
+    'admin/settings/site-information' => '',
+    'admin/settings/date-time' => '',
+    'admin/build/themes/settings/jake' => 'Theme settings',
+    'admin/user/user' => '',
+    'admin/build/features' => '',
+    'admin/settings/openlayers' => '',
+    'import/opml' => 'Import OPML',
+    'import/locations' => 'Import locations',
+  );
+}
+
+/**
+ * Implementation of hook_menu_alter().
+ */
+function mn_core_menu_alter(&$items) {
+
+  // Rename Delete items to Delete locations for clarity.
+  $items['import/locations/delete-items']['title'] = t('Delete locations');
+
+  $items['node/%node']['page callback'] = 'mn_core_node_page_router';
+
+  // Poke access holes into menu tree for MN-relevant admin pages.
+  $admin_paths = mn_core_admin_paths();
+  foreach ($items as $path => $item) {
+    foreach ($admin_paths as $admin_path => $title) {
+      if ($path == $admin_path || strpos($path, $admin_path .'/') === 0) {
+        if (!empty($title) && $path == $admin_path) {
+          $items[$path]['title'] = $title;
+        }
+        $items[$path]['access callback'] = 'user_access';
+        $items[$path]['access arguments'] = array('administer mn');
+      }
+    }
+  }
+
+  // This callback we don't want to show in the menu.
+  $items['admin/reports/status/run-cron']['access callback'] = 'user_access';
+  $items['admin/reports/status/run-cron']['access arguments'] = array('administer mn');
+
+  // Swap out 403.
+  if (isset($items['access-denied'])) {
+    $items['access-denied']['page callback'] = 'mn_core_403';
+  }
+}
+
+/**
+ * Re route certain node types.
+ */
+function mn_core_node_page_router($node, $cid = NULL) {
+  if ($node->type == 'feed' && function_exists('mn_core_node_page_view')) {
+    return mn_core_node_page_view($node, $cid);
+  }
+  else if ($node->type == 'channel' && function_exists('mn_channels_node_page_view')) {
+    return mn_channels_node_page_view($node, $cid);
+  }
+  return node_page_view($node, $cid);
+}
+
+/**
+ * Node page callback.
+ */
+function mn_core_node_page_view($node, $cid) {
+  menu_set_active_item("feeds/{$node->nid}");
+  return menu_execute_active_handler("feeds/{$node->nid}");
+}
+
+/**
+ * Printing stack =====================================================
+ */
+
+/**
+ * Print controls block.
+ */
+function mn_core_print_controls(&$form_state) {
+  $form = array();
+  $form['query'] = array('#type' => 'value', '#value' => $_GET);
+  $form['title'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Page title'),
+    '#size' => 20,
+    '#default_value' => isset($_GET['title']) ? $_GET['title'] : drupal_get_title(),
+  );
+  $form['items_per_page'] = array(
+    '#type' => 'select',
+    '#title' => t('Stories'),
+    '#options' => drupal_map_assoc(array(25, 50, 75, 100, 200, 500)),
+    '#default_value' => isset($_GET['items_per_page']) ? $_GET['items_per_page'] : 25,
+  );
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Update'),
+  );
+  return $form;
+}
+
+/**
+ * Print controls submit handler.
+ */
+function mn_core_print_controls_submit(&$form, &$form_state) {
+  $query = $form_state['values']['query'];
+  $query['title'] = $form_state['values']['title'];
+  $query['items_per_page'] = $form_state['values']['items_per_page'];
+  drupal_goto($query['q'], drupal_query_string_encode($query, array('q')));
+}
+
+/**
+ * Implementation of hook_views_pre_execute().
+ */
+function mn_core_views_pre_execute(&$view) {
+  if (isset($_GET['print']) && $view->display_handler->display->display_plugin == 'page') {
+    if (!empty($_GET['items_per_page']) && is_numeric($_GET['items_per_page'])) {
+      $view->set_items_per_page($_GET['items_per_page']);
+    }
+    if (isset($_GET['title'])) {
+      drupal_set_title(t($_GET['title']));
+    }
+  }
+  // Set the title on search pages. Unfortunately we can't go through
+  // the argument title stack here since search is an exposed filter.
+  else if ($view->tag == 'mn' && isset($view->exposed_input['search'])) {
+    switch (get_class($view->style_plugin)) {
+      case 'openlayers_views_style_map':
+        $view->display_handler->set_option('title', t('@query on the map', array('@query' => $view->exposed_input['search'])));
+        break;
+      case 'flot_views_plugin_style':
+        $view->display_handler->set_option('title', t('New stories for @query', array('@query' => $view->exposed_input['search'])));
+        break;
+    }
+  }
+}
+
+/**
+ * 403 page.
+ */
+function mn_core_403() {
+  global $user;
+  if ($user->uid) {
+    return "<div class='access-denied'>". t('You are not authorized to access this page. Ask the site administrator for the appropriate permissions to view this page.') ."</div>";
+  }
+  else {
+    return "<div class='access-denied'>". t('You are not authorized to access this page. If you have a user account on the site !login. If you !forgotpassword.', array('!login' => l(t('please login'), 'user/login'), '!forgotpassword' => l(t('forgot your password go here'), 'user/password'))) ."</div>";
+  }
+}
+
+/**
+ * Preprocessor for theme('page').
+ * Show welcome helptext on initial login/site view.
+ */
+function mn_core_preprocess_page(&$vars) {
+  global $user;
+  if (!empty($user->mn_welcome)) {
+    $vars['body_classes'] .= ' help';
+    user_save($user, array('mn_welcome' => NULL));
+  }
+}
+
+/**
+ * Preprocessor for theme('views_view').
+ */
+function mn_core_preprocess_views_view(&$vars) {
+  // Use helptext if available for empty text in views.
+  // Empty text is only displayed if
+  // - This is a page view.
+  // - There is no explicitly defined empty text.
+  // - There are no views rows.
+  // - No exposed filters might have affected this page being empty (e.g. search query).
+  if (empty($vars['rows']) && $vars['view']->display_handler->display->display_plugin == 'page' && empty($vars['view']->exposed_input) && empty($vars['empty'])) {
+    if ($help = menu_get_active_help()) {
+      $vars['empty'] = "<div class='views-help prose clear-block'>{$help}</div>";
+    }
+  }
+}
+
+
+/**
+ * Preprocessor for theme('views_view_fields').
+ *
+ * Provides some interesting templating rules for Views provided by MN to make themers' lives easier.
+ */
+function mn_core_preprocess_views_view_fields(&$vars) {
+  $view = $vars['view'];
+  if ($view->tag == 'mn') {
+    if ($view->display_handler->display->display_plugin === 'page' && $view->base_table == 'feeds_data_syndication') {
+      $vars['template_files'][] = 'mn-feeditem';
+
+      // If there is a URL field present offer templating options based on URLs.
+      if (isset($view->field['config']) && $url = $view->field['config']->render($vars['row'])) {
+        if ($domain = mn_core_get_domain($url)) {
+          $domain = explode('-', $domain);
+          while (count($domain) > 1) {
+            $vars['template_files'][] = "mn-feeditem-". implode('-', $domain);
+            array_shift($domain);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Helper function which returns a css-id safe domain name from a valid URL.
+ */
+function mn_core_get_domain($url) {
+  $matches = array();
+  preg_match("/^(https?):\/\/([a-z0-9\-\.]*)/i", $url, $matches);
+  if (isset($matches[2])) {
+    $domain = strtr($matches[2], array('www.' => ''));
+    $domain = str_replace('.', '-', $domain);
+    return $domain;
+  }
+  return FALSE;
+}
+
+/**
+ * Log memory usage and script run time on cron time
+ */
+function mn_core_cron_log() {
+  if (function_exists('memory_get_peak_usage')) {
+    $peak = number_format(memory_get_peak_usage(TRUE) / 1024 / 1024, 2);
+    watchdog('MN Core', 'Peak memory usage on cron !peak M.', array('!peak' => $peak));
+  }
+  $time = number_format(timer_read('page') / 1000, 2);
+  watchdog('MN Core', 'Page execution time on cron !time s.', array('!time' => $time));
+}

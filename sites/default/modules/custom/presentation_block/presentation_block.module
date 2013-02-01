@@ -1,0 +1,174 @@
+<?php
+// $Id$
+
+/**
+ *
+ *
+ *
+ *
+ *
+ */
+ 
+function presentation_block_block($op='list', $delta=0, $edit=array()) {
+  switch ($op) {
+    case 'list':
+      $arr_blocks[0]['info'] = t('Saturday Presentations');
+      $arr_blocks[1]['info'] = t('Sunday Presentations');
+      return $arr_blocks;
+    case 'view':
+      switch ($delta) {
+        case 0:
+          $arr_blocks['subject'] = t('Saturday Presentations');
+          $arr_blocks['content'] = _create_presentation_table('Saturday');
+          return $arr_blocks;
+        case 1:
+          $arr_blocks['subject'] = t('Sunday Presentations');
+          $arr_blocks['content'] = _create_presentation_table('Sunday');
+          return $arr_blocks;
+      } // end switch
+  } // end switch
+} // end function
+
+function _create_presentation_table($str_day='Saturday') {
+  if ($str_day == 'Saturday') {
+    $str_sql_day = 'Saturday 19 July 2008';
+  } else {
+    $str_sql_day = 'Sunday 20 July 2008';
+  } // endif
+  
+  $not_listed = '<em>open</em>';
+  
+  $arr_tracks = array(
+    1 => 'Drupal Basic'
+    ,2 => 'Drupal Advanced'
+    ,3 => 'Community Building'
+  );
+  
+  $arr_times = array(
+    $str_sql_day.' 09:00 AM' => '09:00AM'
+    ,$str_sql_day.' 09:30 AM' => '09:30AM'
+    ,$str_sql_day.' 10:00 AM' => '10:00AM'
+    ,$str_sql_day.' 11:00 AM' => '11:00AM'
+    ,$str_sql_day.' 12:00 PM' => '12:00PM'
+    ,$str_sql_day.' 01:00 PM' => '01:00PM'
+    ,$str_sql_day.' 02:00 PM' => '02:00PM'
+    ,$str_sql_day.' 03:00 PM' => '03:00PM'
+    ,$str_sql_day.' 04:00 PM' => '04:00PM'
+  );
+  
+  // create sql statement
+  $str_sql = "
+    select distinct
+      n.nid as nid
+      ,n.title as node_title
+      ,cck_date_start.field_date_start_value as start_date
+      ,cck_date_end.field_date_end_value as end_date
+      ,cck_dropdown_track.field_dropdown_track_value as track
+      ,cck_reference_presenters.field_reference_presenters_nid as presenter_id
+      ,cck_dropdown_status.field_dropdown_status_value as event_status
+    from
+      {node} as n
+        inner join {content_field_radio_event_day} as cck_radio_event_day
+          on n.vid = cck_radio_event_day.vid
+        left join {content_field_date_end} as cck_date_end 
+          on n.vid = cck_date_end.vid
+        left join {content_field_date_start} as cck_date_start
+          on n.vid = cck_date_start.vid
+        left join {content_field_dropdown_track} as cck_dropdown_track 
+          on n.vid = cck_dropdown_track.vid
+        left join {content_field_reference_presenters} as cck_reference_presenters 
+          on n.vid = cck_reference_presenters.vid
+        left join {content_type_ct_presentation} as cck_dropdown_status
+          on n.vid = cck_dropdown_status.vid
+    where
+      n.status <> 0
+      and n.type in ('ct_presentation', 'ct_panel_discussion', 'ct_other_event')
+      and cck_radio_event_day.field_radio_event_day_value = '".$str_sql_day."'
+    order by
+      nid
+      ,presenter_id desc
+    ";
+    
+    // do query
+    $sql_results = db_query($str_sql);
+    
+    // go through results
+    while ($row = db_fetch_array($sql_results)) {
+      if ($row['track'] == $arr_tracks[1]) {
+        $arr_presentations[1][] = $row;
+      } 
+      if ($row['track'] == $arr_tracks[2]) {
+        $arr_presentations[2][] = $row;
+      } 
+      if ($row['track'] == $arr_tracks[3]) {
+        $arr_presentations[3][] = $row;
+      } // endif
+    } // end while
+    
+    
+    $str_output = '<table class="'.$str_day.'"><caption>'.$str_sql_day.' Presentations</caption>';
+    
+    // header
+    $str_output .= '<thead><tr><th width="10%">Time</th>';
+    foreach($arr_tracks as $key_track => $value_track) {
+      $str_output .= '<th width="30%">'.$value_track.'</th>';
+    } // end foreach
+    $str_output .= '</tr></thead>';
+    
+    // body
+    $str_output .= '<tbody>';
+    $row_count = 0;
+    foreach($arr_times as $key_time => $value_time) {
+      $row_count += 1;
+      $class = ($row_count % 2 == 1) ? 'even' : 'odd';
+      $str_output .= '<tr class="'.$class.'"><td class="presentation-table-time">'.$value_time.'</td>';
+ 
+      foreach($arr_tracks as $key_t => $value_t) {
+        $str_p_found = $not_listed;
+        $arr_temp_type = $arr_presentations[$key_t];
+        if (is_array($arr_temp_type)) {
+          $class_confirmed = '';
+          foreach($arr_temp_type as $key => $row) {
+            if (strtotime($row['start_date']) == strtotime($key_time)) {
+              $str_p_found = _get_presentation_table_cell($row);
+              $class_confirmed = ' class="presentation-table-'.strtolower($row['event_status']).'"';
+            } // endif
+          } //endif
+          $str_output .= '<td'.$class_confirmed.'>'.$str_p_found.'</td>';
+        } else {
+          $str_output .= '<td>'.$not_listed.'</td>';
+        }
+      } // end foreach
+      
+      $str_output .= '</tr>';
+    } // end foreach
+    $str_output .= '</tbody>';
+    
+    $str_output .= '</table>';
+    return $str_output;
+} //end function
+
+
+function _get_presentation_table_cell($arr_row = array()) {
+  $str_output = '';
+  $obj_node = node_load($arr_row['nid']);
+  $obj_presenter = node_load($arr_row['presenter_id']);
+
+  $link = l($obj_node->title, $obj_node->path, array('absolute'=>true, 'alias'=>true));
+  
+  if ($obj_presenter) {
+    $link_presenter = l($obj_presenter->title, $obj_presenter->path, array('absolute'=>true, 'alias'=>true));
+    $str_presenter = '
+      <br />
+      <span class="presentation-table-cell-presenter">'.$link_presenter.'</span>
+      ';
+  }
+
+  $str_output .= '
+    <div class="presentation-table-cell">
+      <span class="presentation-table-cell-title">'.$link.'</span>
+      '.$str_presenter.'
+    </div>
+    ';
+  return $str_output;
+} //end function

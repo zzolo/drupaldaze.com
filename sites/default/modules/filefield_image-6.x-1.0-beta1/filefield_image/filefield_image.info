@@ -1,0 +1,14 @@
+; $Id: filefield_image.info,v 1.1 2008/06/27 23:39:56 jpetso Exp $
+name = FileField Image
+description = Image support for CCK file fields.
+dependencies[] = filefield
+package = CCK
+core = 6.x
+php = 5.2
+
+; Information added by drupal.org packaging script on 2008-06-30
+version = "6.x-1.0-beta1"
+core = "6.x"
+project = "filefield_image"
+datestamp = "1214787308"
+

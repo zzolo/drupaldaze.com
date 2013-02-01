@@ -1,0 +1,15 @@
+; $Id: filefield_imagecache.info,v 1.1 2008/06/29 18:31:02 jpetso Exp $
+name = FileField ImageCache
+description = ImageCache support for images in CCK file fields.
+dependencies[] = filefield
+dependencies[] = imagecache
+package = CCK
+core = 6.x
+php = 5.2
+
+; Information added by drupal.org packaging script on 2008-06-30
+version = "6.x-1.0-beta1"
+core = "6.x"
+project = "filefield_image"
+datestamp = "1214787308"
+

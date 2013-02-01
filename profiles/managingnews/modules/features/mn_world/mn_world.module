@@ -1,0 +1,58 @@
+<?php
+
+include_once('mn_world.features.inc');
+
+/**
+ * Implementation of hook_enable().
+ *
+ * @todo: move this to a features_rebuild() callback.
+ */
+function mn_world_enable() {
+  $file = 'mn_world.csv';
+  $path = file_directory_path() . '/locations';
+  if (file_check_directory($path, TRUE)) {
+    $filepath = "{$path}/{$file}";
+
+    // Copy locations csv to file directory, avoid using shell_exec() for
+    // compatibility reasons.
+    if (!file_exists($filepath)) {
+      $src = file_get_contents(drupal_get_path('module', 'mn_world') . "/{$file}");
+      file_put_contents($filepath, $src);
+    }
+
+    // Import file.
+    $importer = feeds_importer('locations');
+    $source = feeds_source($importer);
+    $source->addConfig(
+      array(
+        'FeedsFileFetcher' => array(
+          'source' => $filepath
+        ),
+      )
+    );
+    $importer->import($source);
+  }
+}
+
+/**
+ * Implementation of hook_disable().
+ *
+ * @todo: move this to a features_rebuild() callback.
+ */
+function mn_world_disable() {
+  // Dump all items from locations importer.
+  $importer = feeds_importer('locations');
+  $source = feeds_source($importer);
+  feeds_importer('locations')->clear($source);
+}
+
+/**
+ * Implementation of hook_openlayers_layer_handler_info().
+ */
+function mn_world_openlayers_layers_handler_info() {
+  drupal_add_js(drupal_get_path('module', 'mn_world') .'/js/mapbox.js');
+  drupal_add_css(drupal_get_path('module', 'mn_world') .'/js/mapbox.css');
+  return array(
+    'MapBox' => array('layer_handler' => 'MapBox')
+  );
+}

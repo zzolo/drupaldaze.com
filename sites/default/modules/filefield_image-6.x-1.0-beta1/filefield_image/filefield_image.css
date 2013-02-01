@@ -1,0 +1,28 @@
+/**
+ * Image edit widget styles.
+ */
+
+.filefield-image-edit .filefield-image {
+  float: left;
+}
+
+.filefield-image-edit-control {
+  margin-left: 160px;
+  margin-right: 5em;
+}
+
+.filefield-image-edit-info {
+  margin-bottom: 0.7em;
+}
+
+/* The text field is made unnecessarily long by node.css - shorten it */
+.filefield-image-edit .form-text {
+  width: 100%;
+}
+.filefield-image-edit .description {
+  white-space: normal;
+  margin-bottom: 0;
+  overflow: auto; /* indent on line wraps, don't float around the image */
+}
+
+/* End widget form styles */

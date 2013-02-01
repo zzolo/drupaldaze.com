@@ -1,0 +1,11 @@
+; $Id: feedapi_tagger.info,v 1.1 2009/09/22 22:54:48 alexb Exp $
+name = Extractor
+description = "API for extracting terms from text"
+dependencies[] = taxonomy
+core = 6.x
+; Information added by fserver
+core = "6.x"
+datestamp = "1258582513"
+project = "extractor"
+project status url = "http://code.developmentseed.org/fserver"
+version = "6.x-1.0-beta3"

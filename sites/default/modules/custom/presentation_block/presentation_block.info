@@ -1,0 +1,5 @@
+;$Id$
+name = "Custom Presentation View"
+description = "Creates Blocks of each days presentations"
+core = 6.x
+php = 5.1

@@ -1,0 +1,14 @@
+; $Id: openlayers_views.info,v 1.6 2009/09/24 17:40:48 tmcw Exp $
+name = OpenLayers Views
+description = Provides OpenLayers Views plugins.
+core = 6.x
+package = OpenLayers
+dependencies[] = openlayers
+dependencies[] = views
+
+; Information added by drupal.org packaging script on 2009-11-18
+version = "6.x-0.1-alpha6"
+core = "6.x"
+project = "openlayers"
+datestamp = "1258587377"
+

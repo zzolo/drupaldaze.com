@@ -1,0 +1,17 @@
+/* $Id: openlayers.css,v 1.20 2009/09/24 17:40:46 tmcw Exp $ */
+
+/**
+ * @file
+ * OpenLayers Main CSS
+ *
+ * This file holds the base CSS for the openlayers module
+ *
+ * @ingroup openlayers
+ */
+
+/**
+ * Controls
+ */
+.openlayers-controls{
+	z-index:1000;
+}

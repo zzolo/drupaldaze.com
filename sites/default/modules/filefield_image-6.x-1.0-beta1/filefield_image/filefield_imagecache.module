@@ -1,0 +1,143 @@
+<?php
+// $Id: filefield_imagecache.module,v 1.1 2008/06/29 18:31:02 jpetso Exp $
+/**
+ * @file
+ * FileField ImageCache: ImageCache support for images in CCK file fields.
+ */
+
+/**
+ * Implementation of hook_theme().
+ */
+function filefield_imagecache_theme() {
+  return array(
+    'filefield_imagecache_file_formatter_default' => array(
+      'arguments' => array(
+        'file' => NULL, 'field' => NULL, 'file_formatter_settings' => NULL,
+      ),
+    ),
+  );
+}
+
+/**
+ * Implementation of filefield's hook_file_formatter_info().
+ */
+function filefield_imagecache_file_formatter_info() {
+  $module_path = drupal_get_path('module', 'filefield_imagecache');
+
+  return array(
+    'default' => array(
+      'suitability callback' => 'filefield_imagecache_formatter_handles_file',
+      'css' => array($module_path .'/filefield_image.css'),
+      'title' => t('Images (transformed with ImageCache)'),
+      'description' => t('Displays image files after piping them through ImageCache presets. Which means you can have scaled, cropped or otherwise transformed images with this formatter.'),
+    ),
+  );
+}
+
+function filefield_imagecache_file_formatter_settings_default($op, $file_formatter_settings = NULL) {
+  switch ($op) {
+    case 'form':
+      $form = array();
+      $presets = imagecache_presets();
+      $preset_options = array();
+
+      $form['div_begin'] = array(
+        '#type' => 'markup',
+        '#value' => '<div class="filefield-imagecache-formatter-settings">',
+      );
+
+      foreach ($presets as $preset) {
+        $preset_options[$preset['presetname']] = $preset['presetname'];
+      }
+      $form['preset'] = array(
+        '#type' => 'select',
+        '#title' => t('Preset'),
+        '#description' => t('Choose the ImageCache preset that should be applied to images.'),
+        '#options' => $preset_options,
+        '#default_value' => isset($file_formatter_settings['preset'])
+                            ? $file_formatter_settings['preset']
+                            : reset($preset_options), // first element
+        '#prefix' => '<div class="filefield-imagecache-formatter-preset">',
+        '#suffix' => '</div>',
+      );
+
+      $form['style'] = array(
+        '#type' => 'select',
+        '#title' => t('Display as'),
+        '#description' => t('How the transformed image should appear.'),
+        '#options' => array(
+          'default'   => t('Transformed image'),
+          'linked'    => t('Transformed image linked to node'),
+          'imagelink' => t('Transformed image linked to original image'),
+          'path'      => t('File path of transformed image'),
+          'url'       => t('URL of transformed image'),
+        ),
+        '#default_value' => isset($file_formatter_settings['style'])
+                            ? $file_formatter_settings['style']
+                            : 'default',
+        '#prefix' => '<div class="filefield-imagecache-formatter-style">',
+        '#suffix' => '</div>',
+      );
+
+      $form['div_end'] = array(
+        '#type' => 'markup',
+        '#value' => '</div>',
+      );
+      return $form;
+  }
+}
+
+/**
+ * Suitability callback the image widget and formatter.
+ * Handles the three web mimetypes: jpeg, png and gif.
+ */
+function filefield_imagecache_formatter_handles_file($file, $field) {
+  return in_array($file->filemime, array(
+    'image/jpeg', 'image/png', 'image/gif'
+  ));
+}
+
+/**
+ * Theme function for the imagecached single image file formatter.
+ */
+function theme_filefield_imagecache_file_formatter_default($file, $field, $file_formatter_settings) {
+  $presetname = $file_formatter_settings['preset'];
+  $preset = imagecache_preset_by_name($presetname);
+
+  if (empty($preset)) {
+    return '<!-- imagecache formatter preset ('. $presetname .') not found! -->';
+  }
+  $style = $file_formatter_settings['preset'];
+  $classes = implode(' ', array(
+    'filefield-imagecache',
+    'filefield-imagecache-'. $presetname,
+    'filefield-imagecache-'. $style,
+    'filefield-imagecache-'. $presetname .'-'. $style,
+  ));
+
+  $description = empty($file->description) ? $file->filename : $file->description;
+  $title = empty($file->title) ? $description : $file->title;
+
+  switch ($style) {
+    case 'linked':
+      // We do have a node id because filefield merges $element['#item'].
+      $imagetag = theme('imagecache', $presetname, $file->filepath, $description, $title);
+      return l($imagetag, 'node/'. $file->nid,
+              array('attributes' => array('class' => $classes), 'html' => TRUE));
+
+    case 'imagelink':
+      $original_image_url = file_create_url($file->filepath);
+      $imagetag = theme('imagecache', $presetname, $file->filepath, $description, $title);
+      return l($imagetag, $original_image_url,
+              array('attributes' => array('class' => $classes), 'html' => TRUE));
+
+    case 'url':
+      return imagecache_create_url($presetname, $file->filepath);
+
+    case 'path':
+      return imagecache_create_path($presetname, $file->filepath);
+
+    default:
+      return theme('imagecache', $presetname, $file->filepath, $description, $title);
+  }
+}

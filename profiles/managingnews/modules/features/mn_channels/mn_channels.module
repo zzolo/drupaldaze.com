@@ -1,0 +1,156 @@
+<?php
+
+include_once('mn_channels.features.inc');
+
+/**
+ * Implementation of hook_help().
+ */
+function mn_channels_help($path, $arg) {
+  switch ($path) {
+    case 'channels':
+      $output = '<p>';
+      $output .= t('<em>Channels</em> are groups of stories that have been picked by users that relate to the same topic. You can view the stories in each channel by clicking on its title in the left-hand sidebar.');
+      $output .= "</p>";
+      if (node_access('create', 'channel')) {
+        $output .= "<ul>";
+        $output .= "<li>". t("!create a new channel. You can begin adding stories to it by setting it as the active channel on Feeds and Search pages using the star icon to your lower right.", array('!create' => l(t('Create'), 'node/add/channel'))) ."</li>";
+        $output .= "</ul>";
+      }
+      return $output;
+    break;
+  }
+}
+
+/**
+ * Implementation of hook_enable().
+ */
+function mn_channels_enable() {
+  // Create an example channel.
+  $nid = db_result(db_query_range("SELECT nid FROM {node} WHERE type = 'channel'", 0, 1));
+  if (!$nid) {
+    global $user;
+    $node = new stdClass();
+    $node->uid = $user->uid;
+    $node->title = "Example channel";
+    $node->type = 'channel';
+    $node->body = "You can collect news into a channel. Users can read this channel and subscribe to it. This is an example channel. Rename it for your purposes or remove it if you don't need it.";
+    node_save($node);
+    data_node_set_active('feeds_data_syndication', $node->nid);
+  }
+
+  // Use MNDataHandler as data handler. The purpose of this handler is to
+  // avoid having items deleted that are part of a channel.
+  // @todo: this is a stopgap until Data module supports handler plugins.
+  $handler = array(
+    'class' => 'MNChannelsDataHandler',
+    'module' => 'mn_channels',
+    'file' => 'MNChannelsDataHandler.inc',
+  );
+  variable_set('feeds_data_syndication_handler', $handler);
+}
+
+/**
+ * Implementation of hook_disable().
+ */
+function mn_channels_disable() {
+  variable_del('feeds_data_syndication_handler_class');
+}
+
+/**
+ * Implementation of hook_strongarm().
+ */
+function mn_channels_strongarm() {
+  return array(
+    'node_options_channel' => array (
+      0 => 'status',
+    ),
+    'upload_channel' => '0',
+  );
+}
+
+/**
+ * Override node callback. Invoked from mn_core.
+ */
+function mn_channels_node_page_view($node, $cid = NULL) {
+  drupal_set_title(t('News on @title', array('@title' => $node->title)));
+  context_set_by_condition('node', $node->type);
+  $view = views_get_view('mn_channels_news');
+  return $view->execute_display('page_1', array($node->nid));
+}
+
+/**
+ * Implementation of hook_views_pre_build().
+ */
+function mn_channels_views_pre_build(&$view) {
+  if ($view->base_table == 'feeds_data_syndication' && get_class($view->display_handler) == 'views_plugin_display_page') {
+    $fields = $view->display_handler->get_option('fields');
+    if (empty($fields['data_node_add_remove'])) {
+      $fields['data_node_add_remove'] = array(
+        'label' => '',
+        'alter' => array(
+          'alter_text' => 0,
+          'text' => '',
+          'make_link' => 0,
+          'path' => '',
+          'link_class' => '',
+          'alt' => '',
+          'prefix' => '',
+          'suffix' => '',
+          'help' => '',
+          'trim' => 0,
+          'max_length' => '',
+          'word_boundary' => 1,
+          'ellipsis' => 1,
+          'strip_tags' => 0,
+          'html' => 0,
+        ),
+        'exclude' => 0,
+        'id' => 'data_node_add_remove',
+        'table' => 'feeds_data_syndication',
+        'field' => 'data_node_add_remove',
+        'relationship' => 'none',
+      );
+    }
+    if (empty($fields['data_node_list'])) {
+      $fields['data_node_list'] = array(
+        'label' => '',
+        'alter' => array(
+          'alter_text' => 0,
+          'text' => '',
+          'make_link' => 0,
+          'path' => '',
+          'link_class' => '',
+          'alt' => '',
+          'prefix' => '',
+          'suffix' => '',
+          'help' => '',
+          'trim' => 0,
+          'max_length' => '',
+          'word_boundary' => 1,
+          'ellipsis' => 1,
+          'strip_tags' => 0,
+          'html' => 0,
+        ),
+        'exclude' => 0,
+        'id' => 'data_node_list',
+        'table' => 'feeds_data_syndication',
+        'field' => 'data_node_list',
+        'override' => array(
+          'button' => 'Override',
+        ),
+        'relationship' => 'none',
+      );
+    }
+    $view->display_handler->set_option('fields', $fields);
+  }
+}
+
+/**
+ * Implementation of hook_context_links_alter().
+ * Yank out the channel link from where it does not belong.
+ */
+function mn_channels_context_links_alter(&$links) {
+  if (isset($links['channel']) && context_get('mn', 'section') !== 'channels') {
+    unset($links['channel']);
+  }
+}

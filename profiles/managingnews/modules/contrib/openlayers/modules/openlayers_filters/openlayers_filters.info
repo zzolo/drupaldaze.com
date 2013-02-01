@@ -1,0 +1,12 @@
+; $Id: openlayers_filters.info,v 1.5 2009/09/24 17:40:48 tmcw Exp $
+name = OpenLayers Filters
+description = The OpenLayers Filters module provides input filters to allow for inline maps.
+core = 6.x
+package = OpenLayers
+dependencies[] = openlayers
+; Information added by drupal.org packaging script on 2009-11-18
+version = "6.x-0.1-alpha6"
+core = "6.x"
+project = "openlayers"
+datestamp = "1258587377"
+

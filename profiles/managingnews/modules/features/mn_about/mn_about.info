@@ -1,0 +1,16 @@
+core = "6.x"
+dependencies[] = "book"
+dependencies[] = "context"
+dependencies[] = "node"
+description = "Simple about section."
+features[context][] = "mn-section-about"
+features[node][] = "book"
+name = "MN About"
+package = "Managing News"
+
+; Information added by fserver
+core = "6.x"
+datestamp = "1256072372"
+project = "mn_about"
+project status url = "http://code.developmentseed.org/fserver"
+version = "6.x-1.0-beta4"

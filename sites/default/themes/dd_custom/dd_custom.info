@@ -1,0 +1,13 @@
+name = Drupal Daze
+description = Drupal Daze theme is taken from http://www.freecsstemplates.org/preview/bestfriends
+core = 6.x
+engine = phptemplate
+
+regions[header] = Header
+regions[right] = Right sidebar
+regions[contenttop] = Content top
+regions[contentbottom] = Content bottom
+regions[contentfooter] = Content footer
+regions[footer] = Footer
+regions[bottomleft] = Bottom Left
+regions[bottom Right] = Bottom Right
