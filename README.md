@@ -7,7 +7,7 @@ This is an archive of that site.
 This is a Drupal 6 site.  This has not been fully worked out.  Due to some hard coding paths and switch from site based config to default, things are a bit messy.  Good luck.
 
 * Database dump (coming soon)
-* May be a prefix:  ```$db_prefix = 'dr6_';```
+* May be a prefix:  ```$db_prefix = 'd6_dd_';```
 
 
 ## Screenshot:
